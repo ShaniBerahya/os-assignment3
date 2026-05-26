@@ -126,6 +126,10 @@ exec(char *path, char **argv)
   p->sz = sz;
   p->trapframe->epc = elf.entry;  // initial program counter = main
   p->trapframe->sp = sp; // initial stack pointer
+
+  // Restore the kernel framebuffer before freeing pages the GPU may still read.
+  virtio_gpu_restore_kernel_fb_if_current(p->pagetable);
+
   // Unmap Memory-Mapped Framebuffer
   if(p->display_mapped){
     virtio_gpu_unmap(oldpagetable, p->display_va);

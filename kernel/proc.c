@@ -164,6 +164,9 @@ freeproc(struct proc *p)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
   if(p->pagetable){
+    // Restore the kernel framebuffer before freeing pages the GPU may still read.
+    virtio_gpu_restore_kernel_fb_if_current(p->pagetable);
+
     // Unmap Memory-Mapped Framebuffer (this memory is'nt free becuse it's owned by the karnal)
     if(p->display_mapped){
     virtio_gpu_unmap(p->pagetable, p->display_va);

@@ -55,6 +55,7 @@
 #define COLOR_BG 0x00000000u // black
 #define COLOR_FG 0x00FFFFFFu // white  (R=FF G=FF B=FF)
 
+
 // ── VirtIO GPU structures (from VirtIO spec §5.7) ─────────────────────
 
 struct virtio_gpu_ctrl_hdr
@@ -125,6 +126,12 @@ struct virtio_gpu_resource_detach_backing
     uint32 resource_id;
     uint32 padding;
 }; // 32 bytes
+
+static struct virtio_gpu_mem_entry kernel_fb_entries[FB_PAGES];
+
+static int flipped_to_user = 0;
+static pagetable_t flipped_pagetable = 0;
+static uint64 flipped_va = 0;
 
 // ── Virtqueue state ──────────────────────────────────────────────────
 
@@ -504,12 +511,13 @@ void virtio_gpu_init(void)
     // Build the initial kernel framebuffer backing entries and attach.
     // gpu_cmd_attach() will also record them in attach_buf.entries[] so they
     // can be reused to restore the backing after a flip.
-    static struct virtio_gpu_mem_entry fb_entries[FB_PAGES];
     for (int i = 0; i < FB_PAGES; i++) {
-        fb_entries[i].addr   = (uint64)fb[i];
-        fb_entries[i].length = PGSIZE;
+        kernel_fb_entries[i].addr = (uint64)fb[i];
+        kernel_fb_entries[i].length = PGSIZE;
+        kernel_fb_entries[i].padding = 0;
     }
-    gpu_cmd_attach(fb_entries, FB_PAGES);
+
+    gpu_cmd_attach(kernel_fb_entries, FB_PAGES);
 
     // ── 6. Draw "Hello World" into the framebuffer ──────────────────────
     {
@@ -631,7 +639,39 @@ int virtio_gpu_flip(pagetable_t pagetable, uint64 va)
     gpu_cmd_attach(entries, FB_PAGES);
     gpu_transfer_flush();
 
+    flipped_to_user = 1;
+    flipped_pagetable = pagetable;
+    flipped_va = va;
+
     return 0;
+}
+
+void virtio_gpu_restore_kernel_fb(void)
+{
+    gpu_cmd_detach();
+    gpu_cmd_attach(kernel_fb_entries, FB_PAGES);
+    gpu_transfer_flush();
+
+    flipped_to_user = 0;
+    flipped_pagetable = 0;
+    flipped_va = 0;
+}
+
+void virtio_gpu_restore_kernel_fb_if_current(pagetable_t pagetable)
+{
+    if(flipped_to_user && (flipped_pagetable == pagetable)){
+        for(int i = 0; i < FB_PAGES; i++){
+            uint64 page_va = flipped_va + (uint64)i * PGSIZE;
+            uint64 page_pa = walkaddr(pagetable, page_va);
+
+            if(page_pa == 0)
+                break;
+
+            memmove(fb[i], (void *)page_pa, PGSIZE);
+        }
+
+        virtio_gpu_restore_kernel_fb();
+    }
 }
 
 // ── GPU daemon ────────────────────────────────────────────────────────
