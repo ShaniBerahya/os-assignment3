@@ -48,7 +48,7 @@ kvmmake(void)
 
   // allocate and map a kernel stack for each process.
   proc_mapstacks(kpgtbl);
-  
+
   return kpgtbl;
 }
 
@@ -128,6 +128,28 @@ walkaddr(pagetable_t pagetable, uint64 va)
   return pa;
 }
 
+int
+uvm_range_is_free(pagetable_t pagetable, uint64 va, uint64 len)
+{
+  if((va % PGSIZE) != 0)
+    return 0;
+
+  if(len == 0)
+    return 0;
+
+  if((va >= MAXVA) || (len > MAXVA - va))
+    return 0;
+
+  for(uint64 a = va; a < va + len; a += PGSIZE){
+    pte_t *pte = walk(pagetable, a, 0);
+
+    if(pte != 0 && (*pte & PTE_V))
+      return 0;
+  }
+
+  return 1;
+}
+
 // add a mapping to the kernel page table.
 // only used when booting.
 // does not flush TLB or enable paging.
@@ -150,7 +172,7 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
 
   if(size == 0)
     panic("mappages: size");
-  
+
   a = PGROUNDDOWN(va);
   last = PGROUNDDOWN(va + size - 1);
   for(;;){
@@ -341,7 +363,7 @@ void
 uvmclear(pagetable_t pagetable, uint64 va)
 {
   pte_t *pte;
-  
+
   pte = walk(pagetable, va, 0);
   if(pte == 0)
     panic("uvmclear");

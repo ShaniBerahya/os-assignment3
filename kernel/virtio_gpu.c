@@ -548,6 +548,62 @@ void virtio_gpu_commit(void)
     gpu_transfer_flush();
 }
 
+/*
+ * Helper funcs
+ */
+
+uint64 virtio_gpu_fb_size(void)
+{
+    return FB_PAGES * PGSIZE;
+}
+
+uint64 virtio_gpu_fb_val(uint64 va)
+{
+    if((va % PGSIZE) != 0)
+        return -1;
+
+    uint64 len = virtio_gpu_fb_size();
+
+    if(va >= MAXVA)
+        return -1;
+
+    if(len > MAXVA - va)
+        return -1;
+    return 0;
+}
+
+
+/*
+ * Task 1: Memory-Mapped Framebuffer
+ */
+
+
+
+int virtio_gpu_map(pagetable_t pagetable, uint64 va)
+{
+    if(va % PGSIZE != 0)
+        return -1;
+
+    for(int i = 0; i < FB_PAGES; i++){
+        uint64 page_va = va + i * PGSIZE;
+        uint64 page_pa = (uint64)fb[i];
+
+        if(mappages(pagetable, page_va, PGSIZE, page_pa,
+                    PTE_U | PTE_R | PTE_W) < 0){
+            if(i > 0)
+                uvmunmap(pagetable, va, i, 0);
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+void virtio_gpu_unmap(pagetable_t pagetable, uint64 va)
+{
+    uvmunmap(pagetable, va, FB_PAGES, 0);
+}
+
 // ── GPU daemon ────────────────────────────────────────────────────────
 // Kernel process started by kproc_create().  Wakes every DISPLAY_DAEMON_TICKS
 // timer ticks and issues TRANSFER_TO_HOST_2D + RESOURCE_FLUSH so that
@@ -578,3 +634,4 @@ void display_daemon(void)
         acquire(&tickslock);
     }
 }
+

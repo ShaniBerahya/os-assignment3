@@ -116,5 +116,42 @@ sys_flip_display(void)
 uint64
 sys_map_display(void)
 {
-  return -1;
+  uint64 addr;
+  uint64 len;
+  struct proc *p = myproc();
+
+  argaddr(0, &addr);
+
+  len = virtio_gpu_fb_size();
+
+  if (p->display_mapped)
+    return -1;
+
+  if(addr == 0){
+    addr = PGROUNDUP(p->sz);
+
+    while(addr + len <= MAXVA){
+      if(uvm_range_is_free(p->pagetable, addr, len))
+        break;
+
+      addr += PGSIZE;
+    }
+
+    if(addr + len > MAXVA)
+      return -1;
+  } else {
+    if((addr % PGSIZE) != 0)
+      return -1;
+
+    if(!uvm_range_is_free(p->pagetable, addr, len))
+      return -1;
+  }
+
+  if(virtio_gpu_map(p->pagetable, addr) < 0)
+    return -1;
+
+  p->display_va = addr;
+  p->display_mapped = 1;
+
+  return addr;
 }

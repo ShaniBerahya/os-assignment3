@@ -171,6 +171,7 @@ void            uvmunmap(pagetable_t, uint64, uint64, int);
 void            uvmclear(pagetable_t, uint64);
 pte_t *         walk(pagetable_t, uint64, int);
 uint64          walkaddr(pagetable_t, uint64);
+int             uvm_range_is_free(pagetable_t pagetable, uint64 va, uint64 len);
 int             copyout(pagetable_t, uint64, char *, uint64);
 int             copyin(pagetable_t, char *, uint64, uint64);
 int             copyinstr(pagetable_t, char *, uint64, uint64);
@@ -190,6 +191,10 @@ void            virtio_disk_intr(void);
 void            virtio_gpu_init(void);
 void            virtio_gpu_commit(void);
 void            display_daemon(void);
+uint64          virtio_gpu_fb_size(void);
+uint64          virtio_gpu_fb_val(uint64 va);
+int             virtio_gpu_map(pagetable_t pagetable, uint64 va);
+void            virtio_gpu_unmap(pagetable_t pagetable, uint64 va);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
