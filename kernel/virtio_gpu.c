@@ -604,6 +604,36 @@ void virtio_gpu_unmap(pagetable_t pagetable, uint64 va)
     uvmunmap(pagetable, va, FB_PAGES, 0);
 }
 
+/*
+ * Task 2 function goes here
+ */
+
+int virtio_gpu_flip(pagetable_t pagetable, uint64 va)
+{
+    if(virtio_gpu_fb_val(va) < 0)
+        return -1;
+
+    static struct virtio_gpu_mem_entry entries[FB_PAGES];
+
+    for(int i = 0; i < FB_PAGES; i++){
+        uint64 page_va = va + (uint64)i * PGSIZE;
+        uint64 page_pa = walkaddr(pagetable, page_va);
+
+        if(page_pa == 0)
+            return -1;
+
+        entries[i].addr = page_pa;
+        entries[i].length = PGSIZE;
+        entries[i].padding = 0;
+    }
+
+    gpu_cmd_detach();
+    gpu_cmd_attach(entries, FB_PAGES);
+    gpu_transfer_flush();
+
+    return 0;
+}
+
 // ── GPU daemon ────────────────────────────────────────────────────────
 // Kernel process started by kproc_create().  Wakes every DISPLAY_DAEMON_TICKS
 // timer ticks and issues TRANSFER_TO_HOST_2D + RESOURCE_FLUSH so that
